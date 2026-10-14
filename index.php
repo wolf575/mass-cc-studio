@@ -551,6 +551,15 @@
         </div>
       </div>
     </div>
+    <div class="box-body" id="gen-validation-wrap" style="display:none;">
+      <div class="box-content">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>校验结果</span>
+          <button type="button" class="btn btn-outline-success btn-sm" id="gen-validation-copy">一键复制（完整卡号）</button>
+        </div>
+        <div id="gen-validation-results"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ====== Validate Tab ====== -->
@@ -672,6 +681,9 @@
     const res = await fetch(url, opts);
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) {
+      if (action === 'login') {
+        throw new Error(data.error === 'Invalid credentials' ? '用户名或密码错误' : (data.error || '登录失败'));
+      }
       await logout(true);
       throw new Error('会话已过期，请重新登录');
     }
@@ -700,6 +712,7 @@
     appView.style.display = 'none';
     loginView.style.display = '';
     document.getElementById('login-password').value = '';
+    document.getElementById('login-username').value = '';
   }
   function showApp() {
     loginView.style.display = 'none';
@@ -946,6 +959,10 @@
   const genResultWrap = document.getElementById('gen-result-wrap');
   const genOutput = document.getElementById('gen-output');
   const genStats = document.getElementById('gen-stats');
+  const genValidationWrap = document.getElementById('gen-validation-wrap');
+  const genValidationResults = document.getElementById('gen-validation-results');
+  const genValidationCopy = document.getElementById('gen-validation-copy');
+  let genValidationCopyText = '';
 
   genBtn.addEventListener('click', async function() {
     const count = parseInt(document.getElementById('gen-count').value, 10) || 1;
@@ -966,6 +983,12 @@
       genOutput.value = res.text || '';
       genResultWrap.style.display = '';
       genStats.textContent = '请求数量: ' + (res.count || 0) + ' | 实际生成: ' + (res.generated || 0) + ' | 通过校验: ' + (res.validated || 0) + ' | 格式: ' + (res.format || 'text') + ' | 掩码: ' + (res.maskPan ? '是' : '否') + ' | 校验: ' + (res.validate ? '是' : '否');
+      if (res.validate) {
+        renderGenValidation(res.cards);
+        genValidationWrap.style.display = '';
+      } else {
+        genValidationWrap.style.display = 'none';
+      }
     } catch (err) {
       alert(err.message || '生成失败');
     } finally {
@@ -977,6 +1000,50 @@
     const text = genOutput.value;
     if (!text) return;
     await copyText(text, this, '已复制');
+  });
+
+  function renderGenValidation(cards) {
+    const buckets = { live: [], unknown: [], die: [] };
+    (cards || []).forEach(function(c) {
+      const v = c.validation || {};
+      const s = (v.status === 'live' || v.status === 'die') ? v.status : 'unknown';
+      buckets[s].push({
+        number: c.masked || c.number || '-',
+        full: c.number || c.masked || '-',
+        network: v.network || '-',
+        score: (v.score === undefined || v.score === null) ? '-' : v.score,
+        reason: v.reason || ''
+      });
+    });
+    const groups = [
+      { key: 'live', label: 'Live', color: '#10b981' },
+      { key: 'unknown', label: 'Unknown', color: '#f59e0b' },
+      { key: 'die', label: 'Die', color: '#ef4444' }
+    ];
+    let html = '';
+    const copyLines = [];
+    groups.forEach(function(g) {
+      const items = buckets[g.key];
+      if (!items.length) return;
+      html += '<div class="section-title" style="color:' + g.color + ';">' + g.label + ' (' + items.length + ')</div>';
+      items.forEach(function(it) {
+        html += '<div style="padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.85rem;">'
+          + '<b style="color:' + g.color + ';">' + g.label + '</b>'
+          + ' <span style="opacity:0.7;font-size:11px;">(' + escapeHtml(it.network) + ')</span>'
+          + ' | ' + escapeHtml(it.number)
+          + ' | score <b>' + escapeHtml(String(it.score)) + '</b>'
+          + ' <span style="opacity:0.7;">' + escapeHtml(it.reason) + '</span>'
+          + '</div>';
+        copyLines.push(g.label + ' (' + it.network + ') | ' + it.full + ' | score ' + it.score + ' | ' + it.reason);
+      });
+    });
+    genValidationCopyText = copyLines.join('\n');
+    genValidationResults.innerHTML = html || '<div class="result-empty">无校验结果</div>';
+  }
+
+  genValidationCopy.addEventListener('click', async function() {
+    if (!genValidationCopyText) return;
+    await copyText(genValidationCopyText, this, '已复制');
   });
 
   // ==================== Validate Tab ====================

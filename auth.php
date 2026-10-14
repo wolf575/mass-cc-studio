@@ -75,10 +75,11 @@ function studio_read_state(string $file): array
     return is_array($decoded) ? $decoded : [];
 }
 
-function studio_write_state(string $file, array $data): void
+function studio_write_state(string $file, array $data): bool
 {
     studio_ensure_data_dir();
-    @file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n", LOCK_EX);
+    $bytes = @file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n", LOCK_EX);
+    return $bytes !== false;
 }
 
 function studio_rate_allow(string $key, int $limit, int $windowSeconds): bool
@@ -160,7 +161,9 @@ function studio_load_auth(): array
         return $auth;
     }
 
-    $salt = 'env:' . SESSION_SECRET;
+    // Default credentials are public/known, so a fixed salt is fine and avoids
+    // any dependence on the auto-generated session secret.
+    $salt = 'default:admin';
     return [
         'username' => AUTH_USERNAME,
         'passwordHash' => studio_password_hash(AUTH_PASSWORD, $salt),
@@ -168,9 +171,9 @@ function studio_load_auth(): array
     ];
 }
 
-function studio_save_auth(array $auth): void
+function studio_save_auth(array $auth): bool
 {
-    studio_write_state(AUTH_FILE, [
+    return studio_write_state(AUTH_FILE, [
         'username' => $auth['username'],
         'passwordHash' => $auth['passwordHash'],
         'salt' => $auth['salt'],

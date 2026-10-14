@@ -108,11 +108,13 @@ if ($method === 'POST' && $action === 'settings') {
         $passwordHash = studio_password_hash($newPassword, $salt);
     }
 
-    studio_save_auth([
+    if (!studio_save_auth([
         'username' => $username,
         'passwordHash' => $passwordHash,
         'salt' => $salt,
-    ]);
+    ])) {
+        studio_json(500, ['error' => 'Could not save settings: data directory is not writable']);
+    }
     studio_json(200, ['ok' => true, 'username' => $username]);
 }
 
