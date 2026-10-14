@@ -78,7 +78,7 @@ function studio_read_state(string $file): array
 function studio_write_state(string $file, array $data): void
 {
     studio_ensure_data_dir();
-    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n", LOCK_EX);
+    @file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n", LOCK_EX);
 }
 
 function studio_rate_allow(string $key, int $limit, int $windowSeconds): bool
