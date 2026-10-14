@@ -283,4 +283,13 @@ if ($method === 'POST' && $action === 'check') {
     studio_json(200, massCheckCardData($data));
 }
 
+if ($method === 'POST' && $action === 'check_bulk') {
+    $lines = is_array($body['lines'] ?? null) ? array_slice($body['lines'], 0, 100000) : [];
+    $results = [];
+    foreach ($lines as $line) {
+        $results[] = massCheckCardData((string) $line);
+    }
+    studio_json(200, ['results' => $results]);
+}
+
 studio_json(404, ['error' => 'Not found']);

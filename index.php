@@ -143,6 +143,45 @@
       display: block;
       animation: tabFadeIn 0.22s ease;
     }
+    .checker-mode-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0 0 1rem;
+    }
+    .mode-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+    .segmented {
+      display: inline-flex;
+      gap: 0.25rem;
+      padding: 0.25rem;
+      background: var(--bg-secondary);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+    }
+    .seg-btn {
+      padding: 0.4rem 0.9rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all var(--transition-fast);
+    }
+    .seg-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .seg-btn.active {
+      color: var(--text-primary);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
     .box-body {
       animation: none;
     }
@@ -417,6 +456,14 @@
           aria-describedby="checker-format-help"></textarea>
         <small id="checker-format-help" class="format-help">格式：卡号|MM|YY|CVV（每行一条）</small>
 
+        <div class="checker-mode-wrap">
+          <span class="mode-label">检测模式</span>
+          <div class="segmented" id="checker-mode-seg" role="group" aria-label="检测模式">
+            <button type="button" class="seg-btn active" data-mode="normal">一般模式</button>
+            <button type="button" class="seg-btn" data-mode="fast">极速模式</button>
+          </div>
+        </div>
+
         <div class="progress-bar-container" id="checker-progress-wrap" style="display:none;">
           <div class="progress-bar" id="checker-progress-bar"></div>
         </div>
@@ -519,7 +566,7 @@
           </div>
           <div class="form-group">
             <label for="gen-count">数量</label>
-            <input type="number" id="gen-count" class="form-control" value="10" min="1" max="100000">
+            <input type="number" id="gen-count" class="form-control" value="100" min="1" max="100000">
           </div>
           <div class="form-group">
             <label for="gen-format">格式</label>
@@ -527,7 +574,7 @@
               <option value="text">Text</option>
               <option value="csv">CSV</option>
               <option value="json">JSON</option>
-              <option value="pipe">Pipe</option>
+              <option value="pipe" selected>Pipe</option>
             </select>
           </div>
           <div class="form-group">
@@ -539,7 +586,7 @@
           <label><input type="checkbox" id="gen-include-expiry" checked> 包含有效期</label>
           <label><input type="checkbox" id="gen-include-cvv" checked> 包含 CVV</label>
           <label><input type="checkbox" id="gen-mask-pan"> 掩码 PAN</label>
-          <label><input type="checkbox" id="gen-validate"> 生成后校验</label>
+          <label><input type="checkbox" id="gen-validate" checked> 生成后校验</label>
         </div>
         <div class="button">
           <button type="button" class="btn btn-outline-success" id="gen-btn">生成</button>
@@ -853,6 +900,16 @@
   const checkerUnknownPanel = document.getElementById('checker-unknown-panel');
 
   let checkerState = { running: false, stop: false, total: 0, processed: 0 };
+  const checkerModeSeg = document.getElementById('checker-mode-seg');
+  const checkerModeButtons = checkerModeSeg ? checkerModeSeg.querySelectorAll('.seg-btn') : [];
+  let checkerMode = 'normal';
+
+  checkerModeButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      checkerMode = btn.dataset.mode;
+      checkerModeButtons.forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
 
   function resetChecker() {
     checkerLiveCount.textContent = '0';
@@ -876,27 +933,31 @@
     panel.insertBefore(div.firstElementChild || div, panel.firstChild);
   }
 
+  function checkerApplyResult(data, res) {
+    if (res.error === 1) {
+      checkerAppend(checkerLivePanel, res.msg || '');
+      checkerIncCounter(checkerLiveCount);
+    } else if (res.error === 2) {
+      checkerAppend(checkerDiePanel, res.msg || '');
+      checkerIncCounter(checkerDieCount);
+    } else if (res.error === 3) {
+      checkerAppend(checkerUnknownPanel, res.msg || '');
+      checkerIncCounter(checkerUnknownCount);
+    } else {
+      // format/no-data error for this line — treat as die
+      const safe = String(data).replace(/"/g, '&quot;');
+      const html = '<div class="result-item" data-card-data="' + safe + '"><b style="color:#ef4444;">Die</b> | ' + escapeHtml(data) + ' | ' + escapeHtml(res.message || 'Invalid') + '</div>';
+      checkerAppend(checkerDiePanel, html);
+      checkerIncCounter(checkerDieCount);
+    }
+  }
+
   async function checkerProcessLine(line) {
     const data = line.trim();
     if (!data) return;
     try {
       const res = await api('check', 'POST', { data });
-      if (res.error === 1) {
-        checkerAppend(checkerLivePanel, res.msg || '');
-        checkerIncCounter(checkerLiveCount);
-      } else if (res.error === 2) {
-        checkerAppend(checkerDiePanel, res.msg || '');
-        checkerIncCounter(checkerDieCount);
-      } else if (res.error === 3) {
-        checkerAppend(checkerUnknownPanel, res.msg || '');
-        checkerIncCounter(checkerUnknownCount);
-      } else if (res.error === 4) {
-        // format/no-data error for this line — treat as die
-        const safe = String(data).replace(/"/g, '&quot;');
-        const html = '<div class="result-item" data-card-data="' + safe + '"><b style="color:#ef4444;">Die</b> | ' + escapeHtml(data) + ' | ' + escapeHtml(res.message || 'Invalid') + '</div>';
-        checkerAppend(checkerDiePanel, html);
-        checkerIncCounter(checkerDieCount);
-      }
+      checkerApplyResult(data, res);
     } catch (err) {
       const safe = String(data).replace(/"/g, '&quot;');
       const html = '<div class="result-item" data-card-data="' + safe + '"><b style="color:#ef4444;">Die</b> | ' + escapeHtml(data) + ' | ' + escapeHtml(err.message || 'Error') + '</div>';
@@ -917,9 +978,32 @@
     checkerStats.style.display = '';
     checkerProgressWrap.style.display = '';
     setBusy(checkerStart, true, '开始');
-    checkerStop.disabled = false;
     checkerInput.disabled = true;
 
+    if (checkerMode === 'fast') {
+      checkerStop.disabled = true;
+      checkerProgressBar.style.width = '0%';
+      try {
+        const res = await api('check_bulk', 'POST', { lines });
+        const results = Array.isArray(res.results) ? res.results : [];
+        for (let i = 0; i < lines.length; i++) {
+          checkerApplyResult(lines[i], results[i] || { error: 4, message: 'No result', msg: 'No result' });
+          checkerState.processed++;
+          checkerStatProcessed.textContent = String(checkerState.processed);
+        }
+        checkerProgressBar.style.width = '100%';
+      } catch (err) {
+        alert(err.message || '极速检测失败');
+      } finally {
+        checkerState.running = false;
+        setBusy(checkerStart, false, '开始');
+        checkerStop.disabled = true;
+        checkerInput.disabled = false;
+      }
+      return;
+    }
+
+    checkerStop.disabled = false;
     for (let i = 0; i < lines.length; i++) {
       if (checkerState.stop) break;
       await checkerProcessLine(lines[i]);
