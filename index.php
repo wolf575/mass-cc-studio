@@ -560,10 +560,7 @@
     </div>
     <div class="box-body" id="gen-validation-wrap" style="display:none;">
       <div class="box-content">
-        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
-          <span>校验结果</span>
-          <button type="button" class="btn btn-outline-success btn-sm" id="gen-validation-copy">一键复制（完整卡数据）</button>
-        </div>
+        <div class="section-title">校验结果</div>
         <div id="gen-validation-results"></div>
       </div>
     </div>
@@ -808,7 +805,7 @@
   }
 
   // ==================== Copy helper ====================
-  async function copyText(text, btnEl, doneText) {
+  async function writeClipboard(text) {
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
@@ -823,15 +820,20 @@
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
-      if (btnEl) {
-        const old = btnEl.textContent;
-        btnEl.textContent = doneText || '已复制';
-        setTimeout(() => { btnEl.textContent = old; }, 1200);
-      }
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  async function copyText(text, btnEl, doneText) {
+    const ok = await writeClipboard(text);
+    if (ok && btnEl) {
+      const old = btnEl.textContent;
+      btnEl.textContent = doneText || '已复制';
+      setTimeout(() => { btnEl.textContent = old; }, 1200);
+    }
+    return ok;
   }
 
   // ==================== Checker Tab ====================
@@ -968,8 +970,7 @@
   const genStats = document.getElementById('gen-stats');
   const genValidationWrap = document.getElementById('gen-validation-wrap');
   const genValidationResults = document.getElementById('gen-validation-results');
-  const genValidationCopy = document.getElementById('gen-validation-copy');
-  let genValidationCopyText = '';
+  const genValidationCopyByGroup = { live: [], die: [], unknown: [] };
 
   genBtn.addEventListener('click', async function() {
     const count = parseInt(document.getElementById('gen-count').value, 10) || 1;
@@ -1036,19 +1037,29 @@
         reason: v.reason || ''
       });
     });
+
+    genValidationCopyByGroup.live = [];
+    genValidationCopyByGroup.die = [];
+    genValidationCopyByGroup.unknown = [];
+
     const groups = [
       { key: 'live', label: 'Live', color: '#10b981' },
       { key: 'unknown', label: 'Unknown', color: '#f59e0b' },
       { key: 'die', label: 'Die', color: '#ef4444' }
     ];
     let html = '';
-    const copyLines = [];
     groups.forEach(function(g) {
       const items = buckets[g.key];
       if (!items.length) return;
-      html += '<div class="section-title" style="color:' + g.color + ';">' + g.label + ' (' + items.length + ')</div>';
+      html += '<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;color:' + g.color + ';">'
+        + '<span>' + g.label + ' (' + items.length + ')</span>'
+        + '<button type="button" class="copy-icon gen-copy-group" data-group="' + g.key + '" title="复制全部 ' + g.label + '" aria-label="复制全部 ' + g.label + '" style="color:' + g.color + ';">'
+        + '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+        + '</button>'
+        + '</div>';
       items.forEach(function(it) {
         const ep = expiryParts(it.expiry);
+        genValidationCopyByGroup[g.key].push(it.full + '|' + ep.mm + '|' + ep.yyyy + '|' + (it.cvv || ''));
         html += '<div style="padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.85rem;">'
           + '<b style="color:' + g.color + ';">' + g.label + '</b>'
           + ' <span style="opacity:0.7;font-size:11px;">(' + escapeHtml(it.network) + ')</span>'
@@ -1058,16 +1069,25 @@
           + ' | score <b>' + escapeHtml(String(it.score)) + '</b>'
           + ' <span style="opacity:0.7;">' + escapeHtml(it.reason) + '</span>'
           + '</div>';
-        copyLines.push(it.full + '|' + ep.mm + '|' + ep.yyyy + '|' + (it.cvv || ''));
       });
     });
-    genValidationCopyText = copyLines.join('\n');
     genValidationResults.innerHTML = html || '<div class="result-empty">无校验结果</div>';
   }
 
-  genValidationCopy.addEventListener('click', async function() {
-    if (!genValidationCopyText) return;
-    await copyText(genValidationCopyText, this, '已复制');
+  genValidationResults.addEventListener('click', async function(e) {
+    const btn = e.target.closest('.gen-copy-group');
+    if (!btn) return;
+    const group = btn.dataset.group;
+    const lines = genValidationCopyByGroup[group] || [];
+    if (!lines.length) return;
+    if (!(await writeClipboard(lines.join('\n')))) return;
+    btn.classList.add('copied');
+    const oldTitle = btn.getAttribute('title') || '';
+    btn.setAttribute('title', '已复制');
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.setAttribute('title', oldTitle);
+    }, 1200);
   });
 
   // ==================== Validate Tab ====================
