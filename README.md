@@ -23,16 +23,15 @@
 
 ```bash
 docker run -d \
-  --name mass-cc-studio \
+  -v /docker-data/mass-cc-studio/data:/data \
   -p 8080:80 \
-  -e AUTH_USERNAME=admin \
-  -e "AUTH_PASSWORD=ChangeMe_2026!" \
-  -e SESSION_SECRET=change-this-session-secret \
-  -v mass-cc-studio-data:/var/www/html/data \
+  --name mass-cc-studio \
+  --hostname mass-cc-studio \
+  --restart unless-stopped \
   ghcr.io/wolf575/mass-cc-studio:latest
 ```
 
-打开 <http://localhost:8080>。
+打开 <http://localhost:8080>，用 `admin` / `ChangeMe_2026!` 登录，首次登录后建议立即在“设置”页修改密码。
 
 ### 方式二：docker compose
 
@@ -40,23 +39,27 @@ docker run -d \
 docker compose up -d
 ```
 
-默认同样在 `8080` 端口暴露，可用 `STUDIO_PORT` 覆盖：
+默认在 `8080` 端口暴露，可用 `STUDIO_PORT` 覆盖：
 
 ```bash
 STUDIO_PORT=9090 docker compose up -d
 ```
 
-## 环境变量
+## 持久化
+
+登录凭据、会话密钥、限流状态全部保存在挂载目录 `/data`（宿主机 `/docker-data/mass-cc-studio/data`，可自行调整路径）。删除该目录即恢复初始状态。会话签名密钥会在首次运行时自动生成并持久化，无需手动配置。
+
+## 环境变量（可选）
+
+不传任何环境变量即可直接使用。以下变量仅在需要时覆盖：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `AUTH_USERNAME` | `admin` | 初始登录用户名 |
 | `AUTH_PASSWORD` | `ChangeMe_2026!` | 初始登录密码 |
-| `SESSION_SECRET` | `change-this-session-secret` | 会话签名密钥，生产环境务必修改 |
-| `COOKIE_SECURE` | `0` | 设置为 `1` 时 cookie 仅在 HTTPS 下发送 |
+| `SESSION_SECRET` | 自动生成 | 会话签名密钥，首次运行自动生成并持久化到 `/data` |
+| `COOKIE_SECURE` | `0` | 设为 `1` 时 cookie 仅在 HTTPS 下发送 |
 | `STUDIO_PORT` | `8080` | compose 模式映射到宿主机的外部端口 |
-
-密码与限流状态保存在挂载的 `./data`（或命名卷 `mass-cc-studio-data`）中。
 
 ## 镜像
 
@@ -69,4 +72,4 @@ STUDIO_PORT=9090 docker compose up -d
 
 ## 安全提示
 
-请勿在公网实例上保留默认密码。`SESSION_SECRET` 泄露会允许伪造登录会话；请使用足够随机的值并通过环境变量注入。
+请勿在公网实例上保留默认密码，首次登录后立即在“设置”页修改。会话签名密钥会在首次运行时自动生成并持久化到 `/data`，无需手动配置。

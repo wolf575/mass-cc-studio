@@ -3,3 +3,4 @@
 .diary
 *.md
 .dockerignore
+data

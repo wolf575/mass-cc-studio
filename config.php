@@ -13,12 +13,35 @@ define('APP_TITLE', 'Mass CC Studio');
 define('APP_TAGLINE', 'MASS 检测器 + 合成卡生成 / 校验 / BIN 查询');
 define('APP_FEATURES', ['checker', 'generate', 'validate', 'bin', 'settings']);
 
-define('DATA_DIR', __DIR__ . '/data');
+define('DATA_DIR', getenv('DATA_DIR') ?: '/data');
 define('AUTH_FILE', getenv('AUTH_FILE') ?: DATA_DIR . '/auth.json');
 define('AUTH_USERNAME', getenv('AUTH_USERNAME') ?: 'admin');
 define('AUTH_PASSWORD', getenv('AUTH_PASSWORD') ?: 'ChangeMe_2026!');
-define('SESSION_SECRET', getenv('SESSION_SECRET') ?: 'change-this-session-secret');
 define('COOKIE_SECURE', getenv('COOKIE_SECURE') === '1');
+
+// Session secret: explicit env > persisted file > auto-generated on first run.
+// Persisting keeps sessions valid across restarts without a fixed secret.
+function studio_session_secret(): string
+{
+    $env = getenv('SESSION_SECRET');
+    if ($env !== false && $env !== '') {
+        return $env;
+    }
+    $file = DATA_DIR . '/.session_secret';
+    if (is_file($file)) {
+        $value = trim((string) file_get_contents($file));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    $value = bin2hex(random_bytes(32));
+    if (!is_dir(DATA_DIR)) {
+        @mkdir(DATA_DIR, 0770, true);
+    }
+    @file_put_contents($file, $value, LOCK_EX);
+    return $value;
+}
+define('SESSION_SECRET', studio_session_secret());
 define('SESSION_TTL', 60 * 60 * 8);
 define('MAX_BODY_BYTES', 16 * 1024 * 1024);
 

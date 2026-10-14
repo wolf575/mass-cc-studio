@@ -6,12 +6,11 @@
 
 ```bash
 docker run -d \
-  --name mass-cc-studio \
+  -v /docker-data/mass-cc-studio/data:/data \
   -p 8080:80 \
-  -e AUTH_USERNAME=admin \
-  -e "AUTH_PASSWORD=ChangeMe_2026!" \
-  -e SESSION_SECRET=change-this-session-secret \
-  -v mass-cc-studio-data:/var/www/html/data \
+  --name mass-cc-studio \
+  --hostname mass-cc-studio \
+  --restart unless-stopped \
   ghcr.io/wolf575/mass-cc-studio:latest
 ```
 
@@ -37,49 +36,42 @@ STUDIO_PORT=9090 docker compose up -d
 docker compose down
 ```
 
-如需同时删除持久化数据卷，请谨慎执行：
+## 数据持久化
 
-```bash
-docker compose down -v
-```
+所有运行数据保存在宿主机目录 `/docker-data/mass-cc-studio/data`（容器内 `/data`），包括：
+
+- 登录凭据（修改用户名 / 密码后写入 `auth.json`）
+- 会话签名密钥（首次运行自动生成，写入 `.session_secret`）
+- 登录与 API 限流状态
+
+> 使用 host 目录挂载时，请确保该目录可被容器内的 `www-data`(uid 33) 写入：
+> `chown -R 33:33 /docker-data/mass-cc-studio/data`
+
+删除该目录即可恢复初始状态（默认凭据）。
 
 ## 从源码构建
-
-### 构建镜像
 
 ```bash
 docker build -t mass-cc-studio:local .
 ```
 
-### 用 compose 构建并运行
+用 compose 构建并运行：
 
 ```bash
 docker compose up -d --build
 ```
 
-### 配置覆盖示例
+## 环境变量（可选）
 
-创建 `.env` 文件：
+不传任何环境变量即可使用。需要时可用以下变量覆盖：
 
-```dotenv
-STUDIO_PORT=8080
-AUTH_USERNAME=admin
-AUTH_PASSWORD=ChangeMe_2026!
-SESSION_SECRET=replace-with-a-long-random-string
-COOKIE_SECURE=0
-```
-
-然后执行：
-
-```bash
-docker compose up -d
-```
-
-## 数据持久化
-
-- compose 默认挂载 `./data` 到容器内 `/var/www/html/data`。
-- 该目录保存凭据文件和登录 / API 限流状态。
-- 修改用户名或密码后，凭据会写入此目录，因此会覆盖环境变量中的初始值。
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `AUTH_USERNAME` | `admin` | 初始登录用户名 |
+| `AUTH_PASSWORD` | `ChangeMe_2026!` | 初始登录密码 |
+| `SESSION_SECRET` | 自动生成 | 会话签名密钥（覆盖后不再自动生成） |
+| `COOKIE_SECURE` | `0` | 设为 `1` 时 cookie 仅 HTTPS 下发送 |
+| `STUDIO_PORT` | `8080` | compose 模式映射到宿主机的外部端口 |
 
 ## 镜像标签
 

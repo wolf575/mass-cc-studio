@@ -3,13 +3,9 @@ services:
     image: ghcr.io/wolf575/mass-cc-studio:latest
     build: .
     container_name: mass-cc-studio
+    hostname: mass-cc-studio
+    restart: unless-stopped
     ports:
       - "${STUDIO_PORT:-8080}:80"
-    restart: unless-stopped
     volumes:
-      - ./data:/var/www/html/data
-    environment:
-      AUTH_USERNAME: ${AUTH_USERNAME:-admin}
-      AUTH_PASSWORD: ${AUTH_PASSWORD:-ChangeMe_2026!}
-      SESSION_SECRET: ${SESSION_SECRET:-change-this-session-secret}
-      COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      - ./data:/data
