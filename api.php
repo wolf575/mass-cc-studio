@@ -28,6 +28,57 @@ function studio_bool($value, bool $default = false): bool
     return filter_var($value, FILTER_VALIDATE_BOOLEAN);
 }
 
+function studio_validate_generated(array $card): array
+{
+    $number = (string) ($card['number'] ?? '');
+    $expiry = (string) ($card['expiry'] ?? '');
+    $cvv = (string) ($card['cvv'] ?? '');
+
+    $month = '';
+    $year = '';
+    if ($expiry !== '') {
+        $parts = explode('/', $expiry);
+        $month = $parts[0] ?? '';
+        $year = $parts[1] ?? '';
+    }
+    $fullYear = $year !== '' ? (string) convertToFullYear($year) : '';
+
+    if ($month !== '' && $fullYear !== '' && $cvv !== '') {
+        $check = massCheckCardData($number . '|' . $month . '|' . $fullYear . '|' . $cvv);
+        return [
+            'status' => (string) ($check['status'] ?? 'die'),
+            'network' => (string) ($check['network'] ?? ''),
+            'score' => (int) ($check['score'] ?? 0),
+            'reason' => (string) ($check['message'] ?? ''),
+            'error' => (int) ($check['error'] ?? 4),
+            'card' => (string) ($check['card'] ?? $number),
+        ];
+    }
+
+    $validation = massValidateGenerated(
+        $number,
+        $month !== '' ? $month : null,
+        $fullYear !== '' ? $fullYear : null,
+        $cvv !== '' ? $cvv : null
+    );
+
+    $cardLine = $number;
+    if ($month !== '' || $fullYear !== '' || $cvv !== '') {
+        $cardLine = $number . '|' . $month . '|' . $fullYear . '|' . $cvv;
+    }
+
+    $errorCode = $validation['status'] === 'live' ? 1 : ($validation['status'] === 'die' ? 2 : 3);
+
+    return [
+        'status' => (string) $validation['status'],
+        'network' => (string) $validation['network'],
+        'score' => (int) $validation['score'],
+        'reason' => (string) $validation['reason'],
+        'error' => $errorCode,
+        'card' => $cardLine,
+    ];
+}
+
 if ($method === 'GET' && $action === 'meta') {
     studio_json(200, [
         'name' => APP_TITLE,
@@ -146,24 +197,7 @@ if ($method === 'POST' && $action === 'generate') {
         $card = gen_generate_one($brand, $bin, $includeExpiry, $includeCvv, $expiryYear);
 
         if ($doValidate) {
-            $expMonth = null;
-            $expYear = null;
-            if ($includeExpiry) {
-                if ($expiryYear !== null) {
-                    $expMonth = $card['expiry'] ? (explode('/', $card['expiry'])[0] ?? null) : null;
-                    $expYear = $expiryYear;
-                } elseif ($card['expiry']) {
-                    $parts = explode('/', $card['expiry']);
-                    $expMonth = $parts[0] ?? null;
-                    $expYear = $parts[1] ?? null;
-                }
-            }
-
-            $validation = massValidateGenerated($card['number'], $expMonth, $expYear, $card['cvv']);
-            if (!$validation['valid']) {
-                continue;
-            }
-            $card['validation'] = $validation;
+            $card['validation'] = studio_validate_generated($card);
         }
 
         $cards[] = $card;

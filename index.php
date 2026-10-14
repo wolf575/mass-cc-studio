@@ -138,10 +138,17 @@
     }
     .tab-panel {
       display: none;
-      animation: fadeInUp 0.35s var(--transition-smooth);
     }
     .tab-panel.active {
       display: block;
+      animation: tabFadeIn 0.22s ease;
+    }
+    .box-body {
+      animation: none;
+    }
+    @keyframes tabFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
 
     /* ========== Form helpers ========== */
@@ -393,15 +400,15 @@
   </div>
 
   <nav class="tabs-nav" id="tabs-nav">
-    <button type="button" class="tab-btn active" data-tab="checker">检测器</button>
-    <button type="button" class="tab-btn" data-tab="generate">生成</button>
+    <button type="button" class="tab-btn active" data-tab="generate">生成</button>
+    <button type="button" class="tab-btn" data-tab="checker">检测器</button>
     <button type="button" class="tab-btn" data-tab="validate">校验</button>
     <button type="button" class="tab-btn" data-tab="bin">BIN</button>
     <button type="button" class="tab-btn" data-tab="settings">设置</button>
   </nav>
 
   <!-- ====== Checker Tab ====== -->
-  <div class="tab-panel active" id="tab-checker">
+  <div class="tab-panel" id="tab-checker">
     <div class="box-body">
       <div class="box-content">
         <label for="checker-input" class="form-label badge bg-danger">卡号列表</label>
@@ -488,7 +495,7 @@
   </div>
 
   <!-- ====== Generate Tab ====== -->
-  <div class="tab-panel" id="tab-generate">
+  <div class="tab-panel active" id="tab-generate">
     <div class="box-body">
       <div class="box-content">
         <div class="form-row">
@@ -555,7 +562,7 @@
       <div class="box-content">
         <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
           <span>校验结果</span>
-          <button type="button" class="btn btn-outline-success btn-sm" id="gen-validation-copy">一键复制（完整卡号）</button>
+          <button type="button" class="btn btn-outline-success btn-sm" id="gen-validation-copy">一键复制（完整卡数据）</button>
         </div>
         <div id="gen-validation-results"></div>
       </div>
@@ -982,9 +989,9 @@
       const res = await api('generate', 'POST', body);
       genOutput.value = res.text || '';
       genResultWrap.style.display = '';
-      genStats.textContent = '请求数量: ' + (res.count || 0) + ' | 实际生成: ' + (res.generated || 0) + ' | 通过校验: ' + (res.validated || 0) + ' | 格式: ' + (res.format || 'text') + ' | 掩码: ' + (res.maskPan ? '是' : '否') + ' | 校验: ' + (res.validate ? '是' : '否');
+      genStats.textContent = '请求数量: ' + (res.count || 0) + ' | 实际生成: ' + (res.generated || 0) + ' | 已校验: ' + (res.validated || 0) + ' | 格式: ' + (res.format || 'text') + ' | 掩码: ' + (res.maskPan ? '是' : '否') + ' | 校验: ' + (res.validate ? '是' : '否');
       if (res.validate) {
-        renderGenValidation(res.cards);
+        renderGenValidation(res.cards, res.maskPan);
         genValidationWrap.style.display = '';
       } else {
         genValidationWrap.style.display = 'none';
@@ -1002,15 +1009,29 @@
     await copyText(text, this, '已复制');
   });
 
-  function renderGenValidation(cards) {
+  function expiryParts(expiry) {
+    const parts = expiry ? expiry.split('/') : ['', ''];
+    const mm = parts[0] || '';
+    const yy = parts[1] || '';
+    const yyyy = yy.length === 2 ? '20' + yy : yy;
+    return {
+      mm: mm,
+      yyyy: yyyy,
+      display: mm && yyyy ? (mm + '/' + yyyy) : (expiry || '-')
+    };
+  }
+
+  function renderGenValidation(cards, maskPan) {
     const buckets = { live: [], unknown: [], die: [] };
     (cards || []).forEach(function(c) {
       const v = c.validation || {};
       const s = (v.status === 'live' || v.status === 'die') ? v.status : 'unknown';
       buckets[s].push({
-        number: c.masked || c.number || '-',
+        number: maskPan ? (c.masked || c.number || '-') : (c.number || c.masked || '-'),
         full: c.number || c.masked || '-',
-        network: v.network || '-',
+        expiry: c.expiry || '',
+        cvv: c.cvv || '',
+        network: v.network || c.brand || '-',
         score: (v.score === undefined || v.score === null) ? '-' : v.score,
         reason: v.reason || ''
       });
@@ -1027,14 +1048,17 @@
       if (!items.length) return;
       html += '<div class="section-title" style="color:' + g.color + ';">' + g.label + ' (' + items.length + ')</div>';
       items.forEach(function(it) {
+        const ep = expiryParts(it.expiry);
         html += '<div style="padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.85rem;">'
           + '<b style="color:' + g.color + ';">' + g.label + '</b>'
           + ' <span style="opacity:0.7;font-size:11px;">(' + escapeHtml(it.network) + ')</span>'
           + ' | ' + escapeHtml(it.number)
+          + ' | ' + escapeHtml(ep.display)
+          + ' | ' + escapeHtml(it.cvv || '-')
           + ' | score <b>' + escapeHtml(String(it.score)) + '</b>'
           + ' <span style="opacity:0.7;">' + escapeHtml(it.reason) + '</span>'
           + '</div>';
-        copyLines.push(g.label + ' (' + it.network + ') | ' + it.full + ' | score ' + it.score + ' | ' + it.reason);
+        copyLines.push(it.full + '|' + ep.mm + '|' + ep.yyyy + '|' + (it.cvv || ''));
       });
     });
     genValidationCopyText = copyLines.join('\n');
